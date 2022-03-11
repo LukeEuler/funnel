@@ -34,6 +34,11 @@ func TestMatch(t *testing.T) {
 		Name:    "kcsdlcmasc",
 		Content: "a.bb+",
 	}
+	rule6 := &common.RuleInfo{
+		ID:      "9527",
+		Name:    "xxx",
+		Content: "region = 'ru' & message in '404'",
+	}
 
 	raw1 := `{"region":"ru","message": "xxxx 404 xxxxx"}`
 	raw2 := `{"region":"jp","message": "xxxx 404 xxxxx"}`
@@ -41,21 +46,24 @@ func TestMatch(t *testing.T) {
 	raw4 := `{"a":{"bb":{"ccc":123}}}`
 
 	tests := []struct {
-		name string
-		rule model.Rule
-		data model.Data
-		want bool
+		name    string
+		rule    model.Rule
+		data    model.Data
+		want    bool
+		wantErr bool
 	}{
 		{
 			"test 1",
 			rule1,
 			common.NewJSONData(json.RawMessage(raw1)),
 			true,
+			false,
 		},
 		{
 			"test 2",
 			rule1,
 			common.NewJSONData(json.RawMessage(raw2)),
+			false,
 			false,
 		},
 		{
@@ -63,11 +71,13 @@ func TestMatch(t *testing.T) {
 			rule2,
 			common.NewJSONData(json.RawMessage(raw2)),
 			true,
+			false,
 		},
 		{
 			"test 4",
 			rule3,
 			common.NewJSONData(json.RawMessage(raw2)),
+			false,
 			false,
 		},
 		{
@@ -75,17 +85,31 @@ func TestMatch(t *testing.T) {
 			rule4,
 			common.NewJSONData(json.RawMessage(raw3)),
 			true,
+			false,
 		},
 		{
 			"test 6",
 			rule5,
 			common.NewJSONData(json.RawMessage(raw4)),
 			true,
+			false,
+		},
+		{
+			"test 7",
+			rule6,
+			common.NewJSONData(json.RawMessage(raw1)),
+			false,
+			true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Match(tt.rule, tt.data); got != tt.want {
+			got, err := Match(tt.rule, tt.data)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
 				t.Errorf("Match() = %v, want %v", got, tt.want)
 			}
 		})

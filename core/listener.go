@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/antlr/antlr4/runtime/Go/antlr"
+	"github.com/pkg/errors"
 
 	"github.com/LukeEuler/funnel/antlr4/parser"
-	"github.com/LukeEuler/funnel/model"
 )
 
 /*
@@ -40,24 +40,21 @@ VALUE       : '\'' .*? '\'';
 WHITESPACE  : [ \r\n\t]+ -> skip;
 */
 type listener struct {
-	rule model.Rule
-	data model.Data
+	worker *worker
 
 	// 一个中间态数据
 	lastClause string
 	record     map[string]bool
 }
 
-func (l *listener) set(rule model.Rule, data model.Data) {
-	l.rule = rule
-	l.data = data
+func (l *listener) set(worker *worker) {
+	l.worker = worker
 	l.lastClause = ""
 	l.record = make(map[string]bool)
 }
 
 // VisitTerminal is called when a terminal node is visited.
-func (l *listener) VisitTerminal(node antlr.TerminalNode) {
-}
+func (l *listener) VisitTerminal(node antlr.TerminalNode) {}
 
 // VisitErrorNode is called when an error node is visited.
 func (l *listener) VisitErrorNode(node antlr.ErrorNode) {}
@@ -73,8 +70,11 @@ func (l *listener) EnterSentence(ctx *parser.SentenceContext) {}
 
 // ExitSentence is called when production sentence is exited.
 func (l *listener) ExitSentence(ctx *parser.SentenceContext) {
+	if l.worker.IsErr() {
+		return
+	}
 	match := l.record[l.lastClause]
-	l.data.SetRule(l.rule, match)
+	l.worker.data.SetRule(l.worker.rule, match)
 }
 
 // EnterClause is called when production clause is entered.
@@ -91,6 +91,9 @@ clause      : condition
 
 // ExitClause is called when production clause is exited.
 func (l *listener) ExitClause(ctx *parser.ClauseContext) {
+	if l.worker.IsErr() {
+		return
+	}
 	mark := ctx.GetText()
 	l.lastClause = mark
 	_, ok := l.record[mark]
@@ -121,7 +124,15 @@ func (l *listener) ExitClause(ctx *parser.ClauseContext) {
 }
 
 // EnterCondition is called when production condition is entered.
-func (l *listener) EnterCondition(ctx *parser.ConditionContext) {}
+func (l *listener) EnterCondition(ctx *parser.ConditionContext) {
+	if l.worker.IsErr() {
+		return
+	}
+	if ctx.Key() == nil {
+		l.worker.err = errors.Errorf("invalid condition: %s", ctx.GetText())
+		return
+	}
+}
 
 /*
 condition   : key EXIST
@@ -132,6 +143,9 @@ condition   : key EXIST
 
 // ExitCondition is called when production condition is exited.
 func (l *listener) ExitCondition(ctx *parser.ConditionContext) {
+	if l.worker.IsErr() {
+		return
+	}
 	mark := ctx.GetText()
 	_, ok := l.record[mark]
 	if ok {
@@ -143,15 +157,15 @@ func (l *listener) ExitCondition(ctx *parser.ConditionContext) {
 
 	switch ctx.GetChildCount() {
 	case 2:
-		l.record[mark] = l.data.KeyExist(key)
+		l.record[mark] = l.worker.data.KeyExist(key)
 	case 3:
 		value := ctx.VALUE().GetText()
 		value = strings.TrimPrefix(value, "'")
 		value = strings.TrimSuffix(value, "'")
 		if ctx.EQUAL() != nil {
-			l.record[mark] = l.data.ValueEqual(key, value)
+			l.record[mark] = l.worker.data.ValueEqual(key, value)
 		} else {
-			l.record[mark] = l.data.ValueContains(key, value)
+			l.record[mark] = l.worker.data.ValueContains(key, value)
 		}
 	}
 }

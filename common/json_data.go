@@ -3,22 +3,26 @@ package common
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/tidwall/gjson"
 
 	"github.com/LukeEuler/funnel/model"
 )
 
-// implement model.Data
+// implement model.EventData
 type JSONData struct {
 	Content   json.RawMessage
 	checkList map[string]bool
+
+	GetTimeFunc func(json.RawMessage) int64
 }
 
 func NewJSONData(conetnt json.RawMessage) *JSONData {
 	return &JSONData{
-		Content:   conetnt,
-		checkList: make(map[string]bool),
+		Content:     conetnt,
+		checkList:   make(map[string]bool),
+		GetTimeFunc: DefaultGetTime,
 	}
 }
 
@@ -27,7 +31,7 @@ func (d *JSONData) KeyExist(key string) bool {
 	return value.Exists()
 }
 
-func (d *JSONData) getValueString(key string) (string, bool) {
+func (d *JSONData) GetValueString(key string) (string, bool) {
 	if !d.KeyExist(key) {
 		return "", false
 	}
@@ -40,7 +44,7 @@ func (d *JSONData) getValueString(key string) (string, bool) {
 }
 
 func (d *JSONData) ValueEqual(key string, value string) bool {
-	jValue, ok := d.getValueString(key)
+	jValue, ok := d.GetValueString(key)
 	if !ok {
 		return false
 	}
@@ -48,7 +52,7 @@ func (d *JSONData) ValueEqual(key string, value string) bool {
 }
 
 func (d *JSONData) ValueContains(key string, value string) bool {
-	jValue, ok := d.getValueString(key)
+	jValue, ok := d.GetValueString(key)
 	if !ok {
 		return false
 	}
@@ -65,4 +69,30 @@ func (d *JSONData) Match(rule model.Rule) bool {
 		return false
 	}
 	return match
+}
+
+func (d *JSONData) GetTime() int64 {
+	return d.GetTimeFunc(d.Content)
+}
+
+func (d *JSONData) String() string {
+	return string(d.Content)
+}
+
+func DefaultGetTime(content json.RawMessage) int64 {
+	key := "time"
+	value := gjson.GetBytes(content, key)
+	if !value.Exists() {
+		return 0
+	}
+
+	if value.IsObject() || value.IsArray() {
+		return 0
+	}
+
+	t, err := time.Parse(time.RFC3339, value.String())
+	if err != nil {
+		return 0
+	}
+	return t.Unix()
 }

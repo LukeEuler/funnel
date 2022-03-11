@@ -9,11 +9,30 @@ import (
 
 var lis = &listener{}
 
-func Match(rule model.Rule, data model.Data) bool {
+type worker struct {
+	data model.Data
+	rule model.Rule
+	err  error
+}
+
+func (w *worker) IsErr() bool {
+	return w.err != nil
+}
+
+func newWorker(rule model.Rule, data model.Data) *worker {
+	return &worker{
+		data: data,
+		rule: rule,
+		err:  nil,
+	}
+}
+
+func Match(rule model.Rule, data model.Data) (bool, error) {
 	tree := getSentenceContext(rule.GetContent())
-	lis.set(rule, data)
+	w := newWorker(rule, data)
+	lis.set(w)
 	antlr.ParseTreeWalkerDefault.Walk(lis, tree)
-	return data.Match(rule)
+	return data.Match(rule), w.err
 }
 
 func getSentenceContext(rule string) parser.ISentenceContext {
