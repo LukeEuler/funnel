@@ -26,6 +26,31 @@ func NewJSONData(conetnt json.RawMessage) *JSONData {
 	}
 }
 
+// id len(keys) === 0: still use DefaultGetTime
+func (d *JSONData) SetTimeKeys(keys ...string) *JSONData {
+	if len(keys) == 0 {
+		return d
+	}
+	d.GetTimeFunc = func(content json.RawMessage) int64 {
+		for _, key := range keys {
+			value := gjson.GetBytes(content, key)
+			if !value.Exists() {
+				continue
+			}
+			if value.IsObject() || value.IsArray() {
+				continue
+			}
+			t, err := time.Parse(time.RFC3339, value.String())
+			if err != nil {
+				continue
+			}
+			return t.Unix()
+		}
+		return 0
+	}
+	return d
+}
+
 func (d *JSONData) KeyExist(key string) bool {
 	value := gjson.GetBytes(d.Content, key)
 	return value.Exists()
